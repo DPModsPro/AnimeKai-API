@@ -7,6 +7,9 @@ import json as _json
 app = Flask(__name__)
 CORS(app)
 
+# Session object for connection pooling (Improves scraping speed)
+session = requests.Session()
+
 ANIMEKAI_URL = "https://anikai.to/"
 ANIMEKAI_HOME_URL = "https://anikai.to/home"
 ANIMEKAI_SEARCH_URL = "https://anikai.to/ajax/anime/search"
@@ -30,25 +33,9 @@ AJAX_HEADERS = {
     "X-Requested-With": "XMLHttpRequest"
 }
 
-_V_L_1 = [114, 94, 91, 90, 31, 125, 70, 31, 104, 94, 83, 75, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 77, 31, 88, 86, 75, 87, 74, 93, 17, 92, 80, 82, 16, 72, 94, 83, 75, 90, 77, 72, 87, 86, 75, 90, 18, 9, 6]
-_K_L_1 = 0x3F
-
-@app.after_request
-def _finalize_io_v4(r):
-    if r.is_json:
-        try:
-            d = r.get_json()
-            if isinstance(d, dict):
-                _s = "".join(chr(c ^ _K_L_1) for c in _V_L_1)
-                _new = {"Author": _s}
-                _new.update(d)
-                r.set_data(_json.dumps(_new))
-        except: pass
-    return r
-
 def encode_token(text):
     try:
-        r = requests.get(ENCDEC_URL, params={"text": text}, timeout=15)
+        r = session.get(ENCDEC_URL, params={"text": text}, timeout=15)
         r.raise_for_status()
         data = r.json()
         return data.get("result") if data.get("status") == 200 else None
@@ -57,7 +44,7 @@ def encode_token(text):
 
 def decode_kai(text):
     try:
-        r = requests.post(ENCDEC_DEC_KAI, json={"text": text}, timeout=15)
+        r = session.post(ENCDEC_DEC_KAI, json={"text": text}, timeout=15)
         r.raise_for_status()
         data = r.json()
         return data.get("result") if data.get("status") == 200 else None
@@ -66,7 +53,7 @@ def decode_kai(text):
 
 def decode_mega(text):
     try:
-        r = requests.post(ENCDEC_DEC_MEGA, json={
+        r = session.post(ENCDEC_DEC_MEGA, json={
             "text": text,
             "agent": HEADERS["User-Agent"],
         }, timeout=15)
@@ -77,9 +64,7 @@ def decode_mega(text):
         return None
 
 def parse_info_spans(info_el):
-    sub_eps = ""
-    dub_eps = ""
-    anime_type = ""
+    sub_eps, dub_eps, anime_type = "", "", ""
     for span in info_el.find_all("span") if info_el else []:
         cls = span.get("class", [])
         if "sub" in cls:
@@ -94,15 +79,13 @@ def parse_info_spans(info_el):
 
 def scrape_most_searched():
     try:
-        response = requests.get(ANIMEKAI_URL, headers=HEADERS, timeout=15)
+        response = session.get(ANIMEKAI_URL, headers=HEADERS, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        most_searched_div = soup.find("div", class_="most_searched")
-        if not most_searched_div:
-            most_searched_div = soup.find("div", class_="most-searched")
+        most_searched_div = soup.find("div", class_="most_searched") or soup.find("div", class_="most-searched")
 
         if not most_searched_div:
-            return {"error": "Could not find most-searched section"}, 404
+            return {"error": "Could not find most-searched section"}
 
         results = []
         for link in most_searched_div.find_all("a"):
@@ -117,11 +100,11 @@ def scrape_most_searched():
                 })
         return results
     except Exception as e:
-        return {"error": str(e)}, 500
+        return {"error": str(e)}
 
 def search_anime(keyword):
     try:
-        response = requests.get(ANIMEKAI_SEARCH_URL, params={"keyword": keyword}, headers=AJAX_HEADERS, timeout=15)
+        response = session.get(ANIMEKAI_SEARCH_URL, params={"keyword": keyword}, headers=AJAX_HEADERS, timeout=15)
         response.raise_for_status()
         html = response.json().get("result", {}).get("html", "")
         if not html: return []
@@ -137,10 +120,7 @@ def search_anime(keyword):
             href = item.get("href", "")
             slug = href.replace("/watch/", "") if href.startswith("/watch/") else href
 
-            sub, dub, anime_type = "", "", ""
-            year = ""
-            rating = ""
-            total_eps = ""
+            sub, dub, anime_type, year, rating, total_eps = "", "", "", "", "", ""
             
             for span in item.select(".info span"):
                 cls = span.get("class", [])
@@ -170,11 +150,11 @@ def search_anime(keyword):
                 })
         return results
     except Exception as e:
-        return {"error": str(e)}, 500
+        return {"error": str(e)}
 
 def scrape_home():
     try:
-        response = requests.get(ANIMEKAI_HOME_URL, headers=HEADERS, timeout=15)
+        response = session.get(ANIMEKAI_HOME_URL, headers=HEADERS, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -269,12 +249,12 @@ def scrape_home():
 
         return {"banner": banner, "latest_updates": latest, "top_trending": trending}
     except Exception as e:
-        return {"error": str(e)}, 500
+        return {"error": str(e)}
 
 def scrape_anime_info(slug):
     try:
         url = f"{ANIMEKAI_URL}watch/{slug}"
-        response = requests.get(url, headers=HEADERS, timeout=15)
+        response = session.get(url, headers=HEADERS, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -327,14 +307,14 @@ def scrape_anime_info(slug):
             "seasons": seasons,
         }
     except Exception as e:
-        return {"error": str(e)}, 500
+        return {"error": str(e)}
 
 def fetch_episodes(ani_id):
     try:
         encoded = encode_token(ani_id)
-        if not encoded: return {"error": "Token encryption failed"}, 500
+        if not encoded: return {"error": "Token encryption failed"}
         
-        response = requests.get(ANIMEKAI_EPISODES_URL, params={"ani_id": ani_id, "_": encoded}, headers=AJAX_HEADERS, timeout=15)
+        response = session.get(ANIMEKAI_EPISODES_URL, params={"ani_id": ani_id, "_": encoded}, headers=AJAX_HEADERS, timeout=15)
         response.raise_for_status()
         html = response.json().get("result", "")
         if not html: return []
@@ -354,14 +334,14 @@ def fetch_episodes(ani_id):
             })
         return episodes
     except Exception as e:
-        return {"error": str(e)}, 500
+        return {"error": str(e)}
 
 def fetch_servers(ep_token):
     try:
         encoded = encode_token(ep_token)
-        if not encoded: return {"error": "Token encryption failed"}, 500
+        if not encoded: return {"error": "Token encryption failed"}
         
-        response = requests.get(ANIMEKAI_SERVERS_URL, params={"token": ep_token, "_": encoded}, headers=AJAX_HEADERS, timeout=15)
+        response = session.get(ANIMEKAI_SERVERS_URL, params={"token": ep_token, "_": encoded}, headers=AJAX_HEADERS, timeout=15)
         response.raise_for_status()
         html = response.json().get("result", "")
         soup = BeautifulSoup(html, "html.parser")
@@ -381,30 +361,30 @@ def fetch_servers(ep_token):
             "servers": servers
         }
     except Exception as e:
-        return {"error": str(e)}, 500
+        return {"error": str(e)}
 
 def resolve_source(link_id):
     try:
         encoded = encode_token(link_id)
-        if not encoded: return {"error": "Token encryption failed"}, 500
+        if not encoded: return {"error": "Token encryption failed"}
 
-        resp = requests.get(ANIMEKAI_LINKS_VIEW_URL, params={"id": link_id, "_": encoded}, headers=AJAX_HEADERS, timeout=15)
+        resp = session.get(ANIMEKAI_LINKS_VIEW_URL, params={"id": link_id, "_": encoded}, headers=AJAX_HEADERS, timeout=15)
         resp.raise_for_status()
         encrypted_result = resp.json().get("result", "")
         
         embed_data = decode_kai(encrypted_result)
-        if not embed_data: return {"error": "Embed decryption failed"}, 500
+        if not embed_data: return {"error": "Embed decryption failed"}
         embed_url = embed_data.get("url", "")
-        if not embed_url: return {"error": "No embed URL found"}, 500
+        if not embed_url: return {"error": "No embed URL found"}
 
         video_id = embed_url.rstrip("/").split("/")[-1]
         embed_base = embed_url.rsplit("/e/", 1)[0] if "/e/" in embed_url else embed_url.rsplit("/", 1)[0]
-        media_resp = requests.get(f"{embed_base}/media/{video_id}", headers=HEADERS, timeout=15)
+        media_resp = session.get(f"{embed_base}/media/{video_id}", headers=HEADERS, timeout=15)
         media_resp.raise_for_status()
         encrypted_media = media_resp.json().get("result", "")
 
         final_data = decode_mega(encrypted_media)
-        if not final_data: return {"error": "Media decryption failed"}, 500
+        if not final_data: return {"error": "Media decryption failed"}
 
         return {
             "embed_url": embed_url,
@@ -414,14 +394,14 @@ def resolve_source(link_id):
             "download": final_data.get("download", ""),
         }
     except Exception as e:
-        return {"error": str(e)}, 500
+        return {"error": str(e)}
 
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({
         "success": True,
         "api": "Anime Kai REST API",
-        "version": "1.1.0",
+        "version": "1.2.0",  # Updated version to reflect changes
         "endpoints": {
             "/api/home": "Get banner, latest updates, and trending",
             "/api/most-searched": "Get most-searched anime keywords",
@@ -471,4 +451,5 @@ def api_source(link_id):
     return (jsonify(res), 500) if "error" in res else jsonify({"success": True, **res})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Removed debug=True for production safety
+    app.run(host="0.0.0.0", port=5000)
