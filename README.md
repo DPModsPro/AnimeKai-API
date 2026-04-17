@@ -70,8 +70,8 @@ gunicorn
 ### 2. Deployment Commands (For Render)
 When deploying, make sure to configure the following settings in your deployment dashboard:
  * **Build Command:** ```bash
-   pip install -r requirements.txt
    ```
+   pip install -r requirements.txt
    
    ```
  * **Start Command:** Cloud platforms use gunicorn to run Flask apps in production. Enter the following in the Start Command input box:
