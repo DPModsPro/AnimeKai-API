@@ -48,8 +48,8 @@ pip install flask flask-cors requests beautifulsoup4
 ### 2. Launch the API
 ```bash
 # Clone the repository
-git clone [https://github.com/walterwhite-69/AnimeKAI-API.git](https://github.com/walterwhite-69/AnimeKAI-API.git)
-cd AnimeKAI-API
+git clone [https://github.com/DPModsPro/AnimeKai-API.git](https://github.com/DPModsPro/AnimeKai-API.git)
+cd AnimeKai-API
 
 # Start the server
 python app.py
