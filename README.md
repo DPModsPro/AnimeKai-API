@@ -43,42 +43,56 @@ Ensure you have Python 3.10 or higher installed.
 ```bash
 # Install required packages
 pip install flask flask-cors requests beautifulsoup4
-```
 
+```
 ### 2. Launch the API
 ```bash
 # Clone the repository
-git clone https://github.com/walterwhite-69/AnimeKAI-API.git
+git clone [https://github.com/walterwhite-69/AnimeKAI-API.git](https://github.com/walterwhite-69/AnimeKAI-API.git)
 cd AnimeKAI-API
 
 # Start the server
 python app.py
+
 ```
+## ☁️ Cloud Deployment (Render, Heroku, etc.)
+If you want to host this API on platforms like **Render**, **Heroku**, or **Railway**, you need to follow these specific steps:
+### 1. Add requirements.txt
+Make sure your repository has a requirements.txt file in the root directory. **gunicorn is mandatory** for production cloud deployment. Create or update your file to look exactly like this:
+```text
+Flask
+flask-cors
+requests
+beautifulsoup4
+gunicorn
 
----
-
+```
+### 2. Deployment Commands (For Render)
+When deploying, make sure to configure the following settings in your deployment dashboard:
+ * **Build Command:** ```bash
+   pip install -r requirements.txt
+   ```
+   
+   ```
+ * **Start Command:** Cloud platforms use gunicorn to run Flask apps in production. Enter the following in the Start Command input box:
+   ```bash
+   gunicorn app:app
+   
+   ```
+*(Note: If your main python file is named main.py instead of app.py, use gunicorn main:app instead).*
 ## 📖 API Documentation
-
 ### **Example Discovery Flow**
 | Order | Action | Endpoint | Purpose |
-| :--- | :--- | :--- | :--- |
-| **0** | Search | `GET /api/search?keyword=Naruto` | Find the anime `slug`. |
-| **1** | Info | `GET /api/anime/{slug}` | Extract metadata and the key `ani_id`. |
-| **2** | Episodes | `GET /api/episodes/{ani_id}` | Retrieve individual episode tokens. |
-| **3** | Servers | `GET /api/servers/{ep_token}` | Discover Sub, Dub, and Softsub mirrors. |
-| **4** | **Play** | `GET /api/source/{link_id}` | **Final Prize: Direct m3u8 stream!** |
-
----
-
-
----
-
+|---|---|---|---|
+| **0** | Search | GET /api/search?keyword=Naruto | Find the anime slug. |
+| **1** | Info | GET /api/anime/{slug} | Extract metadata and the key ani_id. |
+| **2** | Episodes | GET /api/episodes/{ani_id} | Retrieve individual episode tokens. |
+| **3** | Servers | GET /api/servers/{ep_token} | Discover Sub, Dub, and Softsub mirrors. |
+| **4** | **Play** | GET /api/source/{link_id} | **Final Prize: Direct m3u8 stream!** |
 ## 👤 Author & Contribution
-Developed and visioned by [**Walter**](https://github.com/walterwhite-69).
+Developed and visioned by **Walter**.
 Please star the repository for future updates
-For contributions, bug reports, or feature requests, visit the official repository:  
-🔗 **[GitHub Repository](https://github.com/DPModsPro/AnimeKai-API)**
-
----
-
+For contributions, bug reports, or feature requests, visit the official repository:
+🔗 **GitHub Repository**
 <p align="center">Made with ❤️by Walter for the Anime Community. <i>Educational use only.</i></p>
+```
