@@ -77,7 +77,7 @@ python app.py
 Developed and visioned by [**Walter**](https://github.com/walterwhite-69).
 Please star the repository for future updates
 For contributions, bug reports, or feature requests, visit the official repository:  
-🔗 **[GitHub Repository](https://github.com/walterwhite-69/AnimeKAI-API)**
+🔗 **[GitHub Repository](https://github.com/DPModsPro/AnimeKai-API)**
 
 ---
 
