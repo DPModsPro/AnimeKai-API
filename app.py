@@ -436,6 +436,72 @@ def resolve_source(link_id):
         logging.error(f"Resolve Source Error for link_id {link_id}: {e}")
         return {"error": str(e)}
 
+# -----------------------------------------------------
+# ⚡ NEW: DYNAMIC GRID SCRAPER FOR GENRES, TYPES & CATS
+# -----------------------------------------------------
+def scrape_grid_page(path, page=1):
+    try:
+        url = f"{ANIMEKAI_URL.rstrip('/')}/{path.strip('/')}"
+        response = session.get(url, params={"page": page}, headers=HEADERS, timeout=REQ_TIMEOUT)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        results = []
+        # Target the general anime item containers used in categories/genres
+        items = soup.select(".aitem") or soup.select(".flw-item")
+        
+        for item in items:
+            title_tag = item.select_one(".title") or item.select_one("h3.film-name a")
+            title = title_tag.get_text(strip=True) if title_tag else ""
+            japanese_title = title_tag.get("data-jp", "") if title_tag else ""
+            
+            poster_img = item.select_one(".poster img") or item.select_one(".film-poster img")
+            poster = poster_img.get("data-src", "") if poster_img and poster_img.has_attr("data-src") else (poster_img.get("src", "") if poster_img else "")
+            
+            a_tag = item.select_one("a.poster") or item.select_one("a.film-poster") or item.select_one("a")
+            href = a_tag.get("href", "") if a_tag else ""
+            slug = href.replace("/watch/", "").split("?")[0].split("#")[0] if href else ""
+            slug = slug.lstrip("/")
+
+            sub, dub, eps = "", "", ""
+            # Extract badges/spans for eps info
+            for badge in item.select(".tick-item") or item.select(".info span") or item.select(".badge"):
+                cls = badge.get("class", [])
+                text = badge.get_text(strip=True).lower()
+                if "sub" in cls or "sub" in text: sub = badge.get_text(strip=True)
+                elif "dub" in cls or "dub" in text: dub = badge.get_text(strip=True)
+                elif "ep" in cls or "ep" in text or text.isdigit(): eps = badge.get_text(strip=True)
+
+            if title and slug:
+                results.append({
+                    "title": title,
+                    "japanese_title": japanese_title,
+                    "slug": slug,
+                    "url": f"{ANIMEKAI_URL.rstrip('/')}/{slug}",
+                    "poster": poster,
+                    "sub_episodes": sub,
+                    "dub_episodes": dub,
+                    "total_episodes": eps
+                })
+        
+        # Check Pagination
+        has_next = False
+        pagination = soup.select_one(".pagination")
+        if pagination:
+            active = pagination.select_one(".active")
+            if active and active.find_next_sibling("li"):
+                has_next = True
+                
+        return {
+            "path_queried": path,
+            "current_page": int(page),
+            "has_next_page": has_next,
+            "results": results
+        }
+    except Exception as e:
+        logging.error(f"Grid Scrape Error for {path}: {e}")
+        return {"error": str(e)}
+
 # ==========================================
 # 🌐 FLASK ROUTES
 # ==========================================
@@ -444,13 +510,18 @@ def index():
     return jsonify({
         "success": True,
         "api": "Anime Kai REST API",
-        "version": "1.3.0",
+        "version": "1.4.0",
         "status": "Online",
         "endpoints": {
-            "/api/health": "[NEW] Check if target server is reachable",
+            "/api/health": "Check if target server is reachable",
+            "/api/menu": "[NEW] Get list of available genres, types & categories",
             "/api/home": "Get banner, latest updates, and trending",
-            "/api/recent": "[NEW] Get only latest updated episodes",
-            "/api/trending": "[NEW] Get only trending anime lists",
+            "/api/genre/<genre_name>?page=1": "[NEW] Get anime by Genre",
+            "/api/type/<type_name>?page=1": "[NEW] Get anime by Type (movies, tv-series, etc)",
+            "/api/category/<category_name>?page=1": "[NEW] Get anime by Category (new-releases, ongoing, etc)",
+            "/api/random": "[NEW] Fetch a random anime",
+            "/api/recent": "Get only latest updated episodes",
+            "/api/trending": "Get only trending anime lists",
             "/api/most-searched": "Get most-searched anime keywords",
             "/api/search?keyword=...": "Search anime",
             "/api/anime/<slug>": "Get anime details and ani_id",
@@ -460,10 +531,73 @@ def index():
         }
     })
 
+@app.route("/api/menu", methods=["GET"])
+def api_menu():
+    # Helper endpoint providing the menus from your screenshot
+    return jsonify({
+        "success": True,
+        "genres": ["action", "adventure", "avant-garde", "boys-love", "comedy", "demons", "drama", "ecchi", "fantasy", "girls-love", "gourmet", "harem", "horror", "isekai", "iyashikei", "josei", "kids", "magic", "mahou-shoujo", "martial-arts", "mecha", "military", "music", "mystery", "parody", "psychological", "reverse-harem", "romance", "school", "sci-fi", "seinen", "shoujo", "shounen", "slice-of-life", "space", "sports", "super-power", "supernatural", "suspense", "thriller", "vampire"],
+        "types": ["movies", "tv-series", "ovas", "onas", "specials"],
+        "categories": ["new-releases", "updates", "ongoing", "recent"]
+    })
+
+@app.route("/api/genre/<genre>", methods=["GET"])
+def api_genre(genre):
+    page = request.args.get("page", 1, type=int)
+    res = scrape_grid_page(f"genre/{genre}", page)
+    return (jsonify(res), 500) if "error" in res else jsonify({"success": True, **res})
+
+@app.route("/api/type/<type_name>", methods=["GET"])
+def api_type(type_name):
+    page = request.args.get("page", 1, type=int)
+    # Mapping friendly names to URL slugs commonly used by these sites
+    mapping = {
+        "movies": "movie",
+        "tv-series": "tv",
+        "ovas": "ova",
+        "onas": "ona",
+        "specials": "special"
+    }
+    target_path = mapping.get(type_name.lower(), type_name)
+    res = scrape_grid_page(target_path, page)
+    return (jsonify(res), 500) if "error" in res else jsonify({"success": True, **res})
+
+@app.route("/api/category/<category>", methods=["GET"])
+def api_category(category):
+    page = request.args.get("page", 1, type=int)
+    # Mapping screenshot names to actual anikai URL paths
+    mapping = {
+        "new-releases": "recently-added",
+        "updates": "recently-updated",
+        "recent": "recently-updated",
+        "ongoing": "ongoing-anime"
+    }
+    target_path = mapping.get(category.lower(), category)
+    res = scrape_grid_page(target_path, page)
+    return (jsonify(res), 500) if "error" in res else jsonify({"success": True, **res})
+
+@app.route("/api/random", methods=["GET"])
+def api_random():
+    try:
+        # Fetch random endpoint and catch the redirect to get the slug
+        r = session.get(f"{ANIMEKAI_URL}random", headers=HEADERS, timeout=REQ_TIMEOUT, allow_redirects=False)
+        
+        if r.status_code in [301, 302, 303, 307, 308]:
+            redirect_url = r.headers.get("Location", "")
+        else:
+            redirect_url = r.url
+            
+        slug = redirect_url.split("/watch/")[-1] if "/watch/" in redirect_url else redirect_url.replace(ANIMEKAI_URL, "")
+        slug = slug.strip("/")
+        
+        return jsonify({"success": True, "slug": slug, "redirect_url": redirect_url})
+    except Exception as e:
+        logging.error(f"Random Anime Error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/api/health", methods=["GET"])
 def api_health():
     try:
-        # Pinging target site to verify external connectivity
         r = session.get(ANIMEKAI_URL, timeout=10)
         return jsonify({"success": True, "api_status": "UP", "anikai_reachable": r.status_code == 200})
     except Exception as e:
