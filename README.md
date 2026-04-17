@@ -69,7 +69,7 @@ gunicorn
 ```
 ### 2. Deployment Commands (For Render)
 When deploying, make sure to configure the following settings in your deployment dashboard:
- * **Build Command:** ```bash
+ * **Build Command:** bash
    ```
    pip install -r requirements.txt
    
@@ -95,4 +95,3 @@ Please star the repository for future updates
 For contributions, bug reports, or feature requests, visit the official repository:
 🔗 **GitHub Repository**
 <p align="center">Made with ❤️by Walter for the Anime Community. <i>Educational use only.</i></p>
-```
