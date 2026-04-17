@@ -1,6 +1,4 @@
-Flask
+flask
 flask-cors
 requests
-urllib3
 beautifulsoup4
-gunicorn
